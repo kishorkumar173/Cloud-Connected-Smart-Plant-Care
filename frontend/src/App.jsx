@@ -21,7 +21,7 @@ export default function App() {
   const [plantProfiles, setPlantProfiles] = useState([]);
   const [isWateringLoading, setIsWateringLoading] = useState(false);
 
-  // Initial load
+  // Initial bootstrap
   useEffect(() => {
     async function init() {
       try {
@@ -129,7 +129,7 @@ export default function App() {
   const isOnline = device?.is_online ?? false;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="dashboard-root">
       <Navbar
         devices={devices}
         activeDeviceId={activeDeviceId}
@@ -137,23 +137,23 @@ export default function App() {
         isOnline={isOnline}
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 flex-1 w-full">
+      <main className="main-content-container">
         {/* Alerts Banner */}
         <AlertBanner alerts={alerts} onAcknowledge={handleAcknowledgeAlert} />
 
         {/* Hero Plant Header */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl">
+        <div className="hero-plant-card">
           <div className="flex items-center space-x-5">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center text-3xl shadow-inner">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center text-3xl shadow-inner flex-shrink-0">
               {currentProfile.icon || '🌱'}
             </div>
             <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold text-white">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="text-2xl font-bold text-white tracking-tight">
                   {device?.plant_name || 'Loading plant...'}
                 </h2>
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                  className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${
                     device?.plant_health_status === 'Healthy'
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                       : device?.plant_health_status === 'Needs Water'
@@ -166,39 +166,40 @@ export default function App() {
                   {device?.plant_health_status || 'Checking status'}
                 </span>
               </div>
-              <p className="text-sm text-slate-400 mt-1">
-                Species: <span className="text-slate-200 font-medium">{device?.plant_type}</span>{' '}
-                &bull; Location:{' '}
-                <span className="text-slate-200 font-medium">{device?.location}</span> &bull; Node:{' '}
-                <span className="text-slate-200 font-mono font-semibold">{device?.device_id}</span>
+              <p className="text-sm text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                <span>Species: <strong className="text-slate-200">{device?.plant_type || 'TOMATO'}</strong></span>
+                <span>&bull;</span>
+                <span>Location: <strong className="text-slate-200">{device?.location || 'Garden'}</strong></span>
+                <span>&bull;</span>
+                <span>Node: <code className="text-slate-200 font-mono font-semibold bg-slate-800 px-2 py-0.5 rounded">{device?.device_id}</code></span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-shrink-0">
             <button
               onClick={handleManualWater}
               disabled={isWateringLoading || isPumpOn}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-blue-500/20 active:scale-95 transition disabled:opacity-50 cursor-pointer"
             >
               <span>💧</span>
-              <span>{isPumpOn ? 'Watering In Progress...' : 'Water Plant Now'}</span>
+              <span>{isPumpOn ? 'Watering Active...' : 'Water Plant Now'}</span>
             </button>
             <button
               onClick={loadDeviceData}
               className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-sm font-semibold transition cursor-pointer"
               title="Refresh"
             >
-              ↻
+              ↻ Refresh
             </button>
           </div>
         </div>
 
-        {/* 6 Metric KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+        {/* 6 Metric KPI Cards Grid */}
+        <div className="kpi-cards-grid">
           <StatusCard
             title="SOIL MOISTURE"
-            value={latestReading?.soil_moisture?.toFixed(1)}
+            value={latestReading?.soil_moisture !== undefined ? latestReading.soil_moisture.toFixed(1) : '--'}
             unit="%"
             icon="🌿"
             subtext={`Target threshold: ${device?.moisture_threshold || 30}%`}
@@ -213,7 +214,7 @@ export default function App() {
 
           <StatusCard
             title="TEMPERATURE"
-            value={latestReading?.temperature?.toFixed(1)}
+            value={latestReading?.temperature !== undefined ? latestReading.temperature.toFixed(1) : '--'}
             unit="°C"
             icon="🌡️"
             subtext="Ideal: 18°C - 32°C"
@@ -223,21 +224,21 @@ export default function App() {
 
           <StatusCard
             title="AIR HUMIDITY"
-            value={latestReading?.humidity?.toFixed(1)}
+            value={latestReading?.humidity !== undefined ? latestReading.humidity.toFixed(1) : '--'}
             unit="%"
             icon="💨"
-            subtext="Relative ambient humidity"
+            subtext="Ambient humidity"
             barPercent={latestReading?.humidity}
             barColor="bg-blue-500"
           />
 
           <StatusCard
             title="LIGHT LEVEL"
-            value={latestReading?.light_level?.toFixed(1)}
+            value={latestReading?.light_level !== undefined ? latestReading.light_level.toFixed(1) : '--'}
             unit="%"
             icon="☀️"
-            subtext="Photosynthesis index"
-            statusLabel="Sunlight"
+            subtext="Sunlight exposure"
+            statusLabel="Solar daylight"
           />
 
           <StatusCard
@@ -247,7 +248,7 @@ export default function App() {
             subtext={
               device?.last_watered_at
                 ? `Last: ${new Date(device.last_watered_at).toLocaleTimeString()}`
-                : 'Last: --'
+                : 'Last: Standby'
             }
             statusLabel={isPumpOn ? 'Submersible pump running' : 'Relay standby'}
             pulseGlow={isPumpOn}
@@ -255,7 +256,7 @@ export default function App() {
 
           <StatusCard
             title="WATER TANK"
-            value={latestReading?.water_tank_level?.toFixed(0) || 85}
+            value={latestReading?.water_tank_level !== undefined ? latestReading.water_tank_level.toFixed(0) : 85}
             unit="%"
             icon="🪣"
             subtext="Reservoir capacity"
@@ -264,10 +265,10 @@ export default function App() {
           />
         </div>
 
-        {/* Real-time Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
+        {/* Real-time Charts Section */}
+        <div className="charts-grid-container">
+          <div className="chart-panel">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <span>📈</span> Soil Moisture Telemetry Trend
@@ -288,7 +289,7 @@ export default function App() {
             <MoistureChart readings={history} threshold={device?.moisture_threshold || 30} />
           </div>
 
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
+          <div className="chart-panel">
             <div className="mb-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <span>🌤️</span> Ambient Microclimate
@@ -299,19 +300,21 @@ export default function App() {
           </div>
         </div>
 
-        {/* Lower Row: Controls & Audit Log */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Controls & Audit Log Section */}
+        <div className="bottom-grid-container">
           {device && (
-            <ControlPanel
-              device={device}
-              plantProfiles={plantProfiles}
-              onToggleAutoWater={handleToggleAutoWater}
-              onUpdateThreshold={handleUpdateThreshold}
-              onSelectProfile={handleSelectProfile}
-            />
+            <div className="control-panel-card">
+              <ControlPanel
+                device={device}
+                plantProfiles={plantProfiles}
+                onToggleAutoWater={handleToggleAutoWater}
+                onUpdateThreshold={handleUpdateThreshold}
+                onSelectProfile={handleSelectProfile}
+              />
+            </div>
           )}
 
-          <div className="lg:col-span-2 bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+          <div className="audit-log-card">
             <div>
               <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
                 <div>
@@ -322,7 +325,7 @@ export default function App() {
                     Immutable cloud audit records of automated & manual watering cycles
                   </p>
                 </div>
-                <span className="text-xs font-medium text-slate-400">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 border border-slate-700">
                   Total: {wateringEvents.length} events
                 </span>
               </div>
@@ -334,7 +337,7 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="border-t border-slate-800/80 bg-slate-900/60 py-6 text-xs text-slate-500 text-center space-y-1">
+      <footer className="border-t border-slate-800 bg-slate-900/60 py-6 text-xs text-slate-500 text-center space-y-1 mt-8">
         <p className="font-medium text-slate-400">
           Cloud-Connected Smart Plant Care & Watering Platform &bull; Academic & Industrial Proof of Work
         </p>
