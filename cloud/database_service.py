@@ -3,22 +3,24 @@ Cloud Database Service
 Manages database connection pooling, table schemas, initialization, and session lifetimes.
 Seamlessly switches between local SQLite (zero-config student setup) and managed cloud
 databases (PostgreSQL, Supabase, Neon, AWS RDS, Google Cloud SQL).
+Includes automated resilient fallback to SQLite if remote PostgreSQL is unreachable (e.g. IPv6 restrictions).
 """
 
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Generator
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from backend.models.db_models import Base, User, Device, SensorReading, WateringEvent, Alert
+from backend.utils.logger import logger
 
-# Resolve base project directory
 BASE_DIR = Path(__file__).resolve().parent.parent
+SQLITE_FALLBACK_URL = f"sqlite:///{BASE_DIR / 'smart_plant.db'}"
 
 # Cloud or local Database URL
-# Example SQLite: sqlite:///./smart_plant.db
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'smart_plant.db'}")
+DATABASE_URL = os.getenv("DATABASE_URL", SQLITE_FALLBACK_URL)
 
 # Normalize PostgreSQL prefixes from cloud providers (Heroku, Render, Supabase)
 if DATABASE_URL.startswith("postgres://"):
@@ -26,18 +28,13 @@ if DATABASE_URL.startswith("postgres://"):
 elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-# SQLite requires check_same_thread=False for multi-threaded FastAPI workers
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+def build_engine(url: str):
+    """Creates SQLAlchemy engine with appropriate connect args."""
+    if url.startswith("sqlite"):
+        return create_engine(url, connect_args={"check_same_thread": False}, echo=False, pool_pre_ping=True)
+    return create_engine(url, echo=False, pool_pre_ping=True, pool_recycle=300)
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args=connect_args,
-    echo=False,
-    pool_pre_ping=True,
-    pool_recycle=300
-)
-
-
+engine = build_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -53,8 +50,26 @@ def get_db() -> Generator[Session, None, None]:
 def init_db(seed_demo: bool = True) -> None:
     """
     Creates database tables and seeds initial sample records for placement-ready demonstrations.
+    Includes auto-fallback to local SQLite if remote PostgreSQL is unreachable (e.g. Render IPv6).
     """
-    Base.metadata.create_all(bind=engine)
+    global engine, SessionLocal
+
+    # Test connectivity and create schema
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning(f"Failed to connect to primary DATABASE_URL ({DATABASE_URL[:30]}...): {str(e)}")
+        if not DATABASE_URL.startswith("sqlite"):
+            logger.warning(
+                "NOTE: Render free tier does not support direct IPv6 Supabase connections. "
+                "Switching automatically to local SQLite fallback database so server stays online!"
+            )
+            logger.info("To connect Supabase on Render, use the Supabase Connection Pooler URI (IPv4) on port 6543.")
+            engine = build_engine(SQLITE_FALLBACK_URL)
+            SessionLocal.configure(bind=engine)
+            Base.metadata.create_all(bind=engine)
+        else:
+            raise e
 
     if not seed_demo:
         return
@@ -115,15 +130,12 @@ def init_db(seed_demo: bool = True) -> None:
         if readings_count == 0:
             now = datetime.now(timezone.utc)
             sample_readings = []
-            # Generate 24 historical data points (last 12 hours, 30 min intervals)
             for i in range(24, 0, -1):
                 t = now - timedelta(minutes=i * 30)
-                # Simulated daytime sine-like temperature and declining moisture
                 hour_fraction = (t.hour + t.minute / 60.0) / 24.0
                 temp = 22.0 + 8.0 * (0.5 - abs(hour_fraction - 0.5) * 2) + (i % 3) * 0.4
                 humidity = 75.0 - (temp - 20.0) * 1.8
                 light = max(5.0, 90.0 * max(0.0, 1.0 - abs(hour_fraction - 0.5) * 2.8))
-                # Moisture declining towards 32%
                 moisture = 48.0 - (24 - i) * 0.7
                 if moisture < 28.0:
                     moisture = 28.0
@@ -140,7 +152,6 @@ def init_db(seed_demo: bool = True) -> None:
 
             db.bulk_save_objects(sample_readings)
 
-            # Seed past watering event
             past_event = WateringEvent(
                 device_id="PLANT-001",
                 trigger_type="AUTOMATIC",
@@ -151,7 +162,6 @@ def init_db(seed_demo: bool = True) -> None:
             )
             db.add(past_event)
 
-            # Seed an informational alert
             info_alert = Alert(
                 device_id="PLANT-001",
                 alert_type="SYSTEM_INITIALIZED",

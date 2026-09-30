@@ -23,11 +23,15 @@ from backend.utils.logger import logger
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown hooks."""
     logger.info("Starting Cloud-Connected Smart Plant Care & Watering Platform...")
-    logger.info("Initializing Cloud Database and seeding demo IoT assets...")
-    init_db(seed_demo=True)
-    logger.info("System initialized successfully. REST APIs and Automation Engines are active.")
+    try:
+        logger.info("Initializing Cloud Database and seeding demo IoT assets...")
+        init_db(seed_demo=True)
+        logger.info("System initialized successfully. REST APIs and Automation Engines are active.")
+    except Exception as e:
+        logger.error(f"Non-critical database initialization warning: {str(e)}")
     yield
     logger.info("Shutting down Cloud Smart Plant Care application.")
+
 
 
 app = FastAPI(
